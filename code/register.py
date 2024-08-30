@@ -1,5 +1,11 @@
 from tkinter import *
 from tkinter.ttk import Combobox
+from tkinter.filedialog import askopenfilename
+from PIL import Image, ImageTk
+import re
+import random
+import sqlite3
+import os
 
 
 root = Tk()
@@ -19,6 +25,72 @@ add = PhotoImage(file="images/add_image.png")
 # Student classes
 student_classes = ['6eme', '5e', '4e', '3e', '2ndC', '2ndA',
                    '1ereD', '1ereA', 'TleD', 'TleA']
+
+
+def init_database():
+    if os.path.exists('student_account.db'):
+        pass
+    else:
+        connection = sqlite3.connect('student_account.db')
+        cursor = connection.cursor()  # Help to execute sqlite3 query
+        query = """
+        CREATE TABLE IF NOT EXISTS data (
+            id_number text,
+            password text,
+            name text,
+            age text,
+            gender text,
+            phone text,
+            class text,
+            email text,
+            image blob
+        )
+        """
+        cursor.execute(query)
+
+        connection.commit()
+        connection.close()
+
+
+def check_id_already_exists(id_number):
+    connection = sqlite3.connect('student_account.db')
+    cursor = connection.cursor()
+    cursor.execute(
+        f"""
+            SELECT id_number FROM data WHERE id_number='{id_number}'
+    """)
+    connection.commit()
+    reponse = cursor.fetchall()
+    connection.close()
+    return reponse
+
+
+def add_data(id_number, password, name, age, gender, phone_number, student_class, email, pic_data):
+    connection = sqlite3.connect('student_account.db')
+    cursor = connection.cursor()
+    cursor.execute(
+        f"""
+        INSERT INTO data VALUES ( '{id_number}','{password}','{name}','{age}','{gender}','{phone_number}','{student_class}','{email}',?)
+    """, [pic_data])
+    connection.commit()
+    connection.close()
+
+
+def message_box(message, statut='red'):
+
+    message_box_fm = Frame(
+        root, highlightbackground=bg_color, highlightthickness=3)
+    message_box_fm.place(x=100, y=120, width=320, height=200)
+    message_lb = Label(message_box_fm, text=message,
+                       fg=statut, font=('Bold', 15))
+    # @..toto
+    # icon_avert = Label(message_box_fm, image=avert, bd=0)
+    # icon_avert.place(x=50, y=100, width=80, height=80)
+
+    close_btn = Button(message_box_fm, text='X', bd=0, font=(
+        'Bold', 13), fg=bg_color, command=lambda: message_box_fm.destroy())
+    close_btn.place(x=290, y=5)
+    message_lb.pack(pady=50)
 
 
 def welcome_page():
@@ -218,15 +290,164 @@ def admin_login_page():
 
 def add_account_page():
     """" Cette fonction appelle page de register form avec tout ces
-    composants. 
+    composants.
     """
+    pic_path = StringVar()
+    pic_path.set(' ')
 
-    # change de page: register form to home
+    def open_pic():
+        '''
+        Cette fonction est utiliser pour ouvrir le gestionnaire de dossiers et prendre une image pour mettre
+        dans le frame de add_image
+        Cette fonction sera commander par le button add_pic_btn
+        '''
+        path = askopenfilename()
+        if path:
+            # print(path)
+            img = ImageTk.PhotoImage(Image.open(path).resize((100, 100)))
+            pic_path.set(path)
+
+            # On fait la mise a jour de l'image
+            add_pic_btn.config(image=img)
+            add_pic_btn.image = img
+
+    def remove_highlight_warning(entry):
+        '''
+         Cette fonction permet d'enlever les avertissement sur les entry une fois remplies. Sinon si on
+         02 entry vides, et on averti de remplir, le user va remplir le 01 et le quand il essaie de soumettre a nouveau,
+         on lui avertira avec les bordure rouge sur l'entry qu'il vient justeb de remplir.
+        '''
+        if entry['highlightbackground'] != 'gray':
+            if entry.get() != '':
+                entry.config(highlightbackground='gray', highlightcolor='gray')
+
+    def check_invalid_email(email):
+        '''
+         verifie email pour avoir la forme john.doe@example.com.
+         email invalides: john.doe@com (TLD trop court)
+        '''
+        pattern = r"^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$"
+        match = re.match(pattern=pattern, string=email)
+        return match
+    #  @...todo: check_phone number and username
+
+    def generate_id_number():
+        '''
+         Cette fonction sera appellée chaque fois qu'on essaie de creer un etudiant,
+         pour generer automatiquement un ID
+         Elle verifie egalement si ID n'existe pas deja dans notre passe de donnée.
+         Si ID existe on fait la recursivité pour en generer a nouveau et la verification se fait automatically
+        '''
+        list_of_elements = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
+                            'j', 'k', 'l', 'm', 'n', 'o', 'p', 'k', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
+        generated_id = ''
+
+        # Définir la longueur souhaitée pour l'ID, par exemple 8 caractères
+        id_length = 6
+
+        # Boucle pour générer l'ID
+        for _ in range(id_length):
+            generated_id += str(random.choice(list_of_elements))
+
+        if not check_id_already_exists(generated_id):
+            student_id_ent.config(state=NORMAL)
+            student_id_ent.delete(0, END)
+            student_id_ent.insert(END, generated_id)
+            student_id_ent.config(state='readonly')
+        # print(generated_id)
+        else:
+            generate_id_number()  # la recurisivite ici
+
+    def check_input_validation():
+        '''
+         Cette fonction verifie chaque entrée et appelle la fonction  message_box au cas ou une entree est vide
+         Pour dire de la remplir car elle est obligatoire
+        '''
+        if student_name_ent.get() == '':
+            student_name_ent.config(
+                highlightbackground='red', highlightcolor='red')
+            student_name_ent.focus()
+            message_box(message='Vous devrez remplir\n le nom de l\'élève')
+        elif student_age_ent.get() == '':
+            student_age_ent.config(
+                highlightbackground='red', highlightcolor='red')
+            student_age_ent.focus()
+            message_box(message="Veuillez renseigner l'âge de l'élève")
+        elif student_contact_ent.get() == '':
+            student_contact_ent.config(
+                highlightbackground='red', highlightcolor='red')
+            student_contact_ent.focus()
+            message_box(
+                message="Veuillez renseigner votre numero \n joignable")
+        elif select_class_btn.get() == '':
+            # select box n'a pas les attribut highlight, donc on va juste focus
+            select_class_btn.focus()
+            message_box(
+                message="Veuillez choisir la classe\ndans la quelle\n vous allez vous inscrie")
+        elif student_email_ent.get() == '':
+            student_email_ent.config(
+                highlightbackground='red', highlightcolor='red')
+            student_email_ent.focus()
+            message_box(
+                message="Veuillez ajouter un email\n pour recevoir des informations\n la dessus.")
+        elif not check_invalid_email(email=student_email_ent.get().lower()):
+            student_email_ent.config(
+                highlightbackground='red', highlightcolor='red')
+            student_email_ent.focus()
+            message_box(
+                message="Email invalide\n Veuillez utiliser un email\n valide.Le format:\njohn.doe@example.com")
+        elif student_password_ent.get() == '':
+            student_password_ent.config(
+                highlightbackground='red', highlightcolor='red')
+            student_password_ent.focus()
+            message_box(
+                message="Le mot de passe est obligatoire!\n Merci de remplir ce champs")
+
+        else:
+            # valide les donnees images avant de les inserer
+            pic_data = b''
+            if pic_path.get() != '':
+                resize_pic = Image.open(pic_path.get()).resize((100, 100))
+                resize_pic.save('temp_pic.jpg')
+                read_data = open('temp_pic.jpg', 'rb')
+                pic_data = read_data.read()
+                read_data.close()
+            else:
+                pass
+                # message_box(
+                #     message="C'est conseillé d'utiliser votre\n photo de profile.Donc cliquez sur la case\n et choisir une de vos photos")
+
+            # Une fois que tout es ok, on passe a inserer les datat dans notre base de données
+            add_data(student_id_ent.get(),
+                     student_password_ent.get(),
+                     student_name_ent.get(),
+                     student_age_ent.get(),
+                     student_gender_val.get(),
+                     student_contact_ent.get(),
+                     select_class_btn.get(),
+                     student_email_ent.get(),
+                     pic_data
+                     )
+            message_box('Votre compte est bien crée\n avec succès! Merci',
+                        statut='green')
+
+            # change de page: register form to home
 
     def change_page():
-        add_account_page_fm.destroy()
-        root.update()
-        welcome_page()
+        '''
+         cette fonction a 2 partie:
+           -Basic, elle change de page register a to home.
+           -Et comme il faut verifier si l'utilisateur veut vraiment switcher avec le confirmation_box,
+                        donc la deuxime partie rente en jeu.
+                        Alors la fonction confirmation_box(message) est definie en bas , pour savoir si le user
+                        veut vraiment switcher la page ou non
+        '''
+        ans = confirmation_box(
+            message='Vous voulez reellement\n quitter cette page?')
+        if ans:
+            add_account_page_fm.destroy()
+            root.update()
+            welcome_page()
 
     student_gender_val = StringVar()  # variable for student gender
 
@@ -238,8 +459,8 @@ def add_account_page():
     add_pic_fm.place(x=5, y=5, width=105, height=105)
 
     # Add student btn
-    add_student_btn = Button(add_pic_fm, image=add, bd=0)
-    add_student_btn.pack()
+    add_pic_btn = Button(add_pic_fm, image=add, bd=0, command=open_pic)
+    add_pic_btn.pack()
 
     # create label and entry bar
     student_name_lb = Label(add_account_page_fm,
@@ -249,6 +470,9 @@ def add_account_page():
     student_name_ent = Entry(add_account_page_fm, font=(
         'Bold', 15), highlightcolor=bg_color, highlightbackground='gray', highlightthickness=2)
     student_name_ent.place(x=5, y=160, width=180)
+    student_name_ent.bind(
+        # À chaque fois que l'utilisateur tape quelque chose dans la zone de texte student_name_ent et relâche la touche, la fonction remove_highlight_warning est exécutée.
+        '<KeyRelease>', lambda e: remove_highlight_warning(entry=student_name_ent))
 
     # create label and radiobtn bar for student gender
     student_gender_lb = Label(add_account_page_fm,
@@ -270,6 +494,9 @@ def add_account_page():
     student_age_ent = Entry(add_account_page_fm, font=(
         'Bold', 15), highlightcolor=bg_color, highlightbackground='gray', highlightthickness=2)
     student_age_ent.place(x=5, y=305, width=180)
+    student_age_ent.bind(
+        # À chaque fois que l'utilisateur tape quelque chose dans la zone de texte student_age_ent et relâche la touche, la fonction remove_highlight_warning est exécutée.
+        '<KeyRelease>', lambda e: remove_highlight_warning(entry=student_age_ent))
 
     # create label and entry bar for student contact
     student_contact_lb = Label(add_account_page_fm,
@@ -278,6 +505,9 @@ def add_account_page():
     student_contact_ent = Entry(add_account_page_fm, font=(
         'Bold', 15), highlightcolor=bg_color, highlightbackground='gray', highlightthickness=2)
     student_contact_ent.place(x=5, y=390, width=180)
+    student_contact_ent.bind(
+        # À chaque fois que l'utilisateur tape quelque chose dans la zone de texte student_contact_ent et relâche la touche, la fonction remove_highlight_warning est exécutée.
+        '<KeyRelease>', lambda e: remove_highlight_warning(entry=student_contact_ent))
 
     # create label and combobox for student classes
     student_class_lb = Label(add_account_page_fm,
@@ -286,6 +516,9 @@ def add_account_page():
     select_class_btn = Combobox(
         add_account_page_fm, font=('Bold', 15), state='readonly', values=student_classes)
     select_class_btn.place(x=5, y=475, width=180, height=30)
+    select_class_btn.bind(
+        # À chaque fois que l'utilisateur tape quelque chose dans la zone de texte student_name_ent et relâche la touche, la fonction remove_highlight_warning est exécutée.
+        '<KeyRelease>', lambda e: remove_highlight_warning(entry=select_class_btn))
 
     # create label and entry bar for student ID number
     student_id_lb = Label(add_account_page_fm,
@@ -293,12 +526,12 @@ def add_account_page():
     student_id_lb.place(x=240, y=35)
     student_id_ent = Entry(
         add_account_page_fm, font=('Bold', 18))
-    student_id_ent.place(x=350, y=35, width=80)
+    student_id_ent.place(x=350, y=35, width=100)
 
     # Insert random number into the id_ent
-    student_id_ent.insert(END, '184570')
     student_id_ent.config(state='readonly')
-    # info about ID
+    generate_id_number()  # Generate ID number
+    # # info about ID
     id_info_lb = Label(add_account_page_fm,
                        text="ID est unique et généré automatiquement!\nRappelle:C'est l'ID utilisé pour se connecter", fg='red', justify=LEFT)
 
@@ -311,6 +544,9 @@ def add_account_page():
     student_email_ent = Entry(add_account_page_fm, font=(
         'Bold', 15), highlightcolor=bg_color, highlightbackground='gray', highlightthickness=2)
     student_email_ent.place(x=240, y=160, width=180)
+    student_email_ent.bind(
+        # À chaque fois que l'utilisateur tape quelque chose dans la zone de texte student_name_ent et relâche la touche, la fonction remove_highlight_warning est exécutée.
+        '<KeyRelease>', lambda e: remove_highlight_warning(entry=student_email_ent))
     # info about email addresses
     email_info_lb = Label(add_account_page_fm,
                           text="Vous recevrez des notifications sur\ncet email.En cas d'oublie de \n  Mot de passe vouasallez utiliser cet email\n", fg='red', justify=LEFT)
@@ -324,6 +560,9 @@ def add_account_page():
     student_password_ent = Entry(add_account_page_fm, font=(
         'Bold', 15), highlightcolor=bg_color, highlightbackground='gray', highlightthickness=2)
     student_password_ent.place(x=240, y=307, width=180)
+    student_password_ent.bind(
+        # À chaque fois que l'utilisateur tape quelque chose dans la zone de texte student_name_ent et relâche la touche, la fonction remove_highlight_warning est exécutée.
+        '<KeyRelease>', lambda e: remove_highlight_warning(entry=student_password_ent))
 
     # info about password
     pass_info_lb = Label(add_account_page_fm,
@@ -337,7 +576,7 @@ def add_account_page():
     home_btn.place(x=240, y=420)
 
     submit_btn = Button(add_account_page_fm, text='Envoyer',
-                        font=('Bold', 15), bg=bg_color, fg='white', bd=0)
+                        font=('Bold', 15), bg=bg_color, fg='white', bd=0, command=check_input_validation)
     submit_btn.place(x=360, y=420)
 
     student_gender_val.set('M')  # Le genre par defaut
@@ -346,5 +585,42 @@ def add_account_page():
     add_account_page_fm.configure(width=480, height=580)
 
 
+def confirmation_box(message):
+
+    answer = BooleanVar()
+    answer.set(False)
+
+    def action(ans):
+        '''
+         cette fonction ajoute la valeur ans a notre answer
+         afin de decider si c'est true or false
+         Cette action sera utilisée sur le button: Oui(avec ans=True) /Non(avec ans=False)
+        '''
+        answer.set(ans)
+        confirmation_box_fm.destroy()
+
+    confirmation_box_fm = Frame(
+        root, highlightbackground=bg_color, highlightthickness=3)
+    message_lb = Label(confirmation_box_fm, text=message,
+                       fg='red', font=('Bold', 15))
+    message_lb.pack(pady=20)
+
+    # button on confirmation_message
+
+    no_btn = Button(confirmation_box_fm, text='Non', font=(
+        'Bold', 15), bd=0, bg=bg_color, fg='white', command=lambda: action(False))
+    no_btn.place(x=50, y=160, width=80)
+
+    yes_btn = Button(confirmation_box_fm, text='Oui', font=(
+        'Bold', 15), bd=0, bg=bg_color, fg='white', command=lambda: action(True))
+    yes_btn.place(x=190, y=160, width=80)
+
+    confirmation_box_fm.place(x=100, y=120, width=320, height=220)
+
+    root.wait_window(confirmation_box_fm)
+    return answer.get()
+
+
+init_database()
 welcome_page()
 root.mainloop()
