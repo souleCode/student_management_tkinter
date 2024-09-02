@@ -1,7 +1,7 @@
 from tkinter import *
 from tkinter.ttk import Combobox
 from tkinter.filedialog import askopenfilename
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 import re
 import random
 import sqlite3
@@ -25,6 +25,80 @@ add = PhotoImage(file="images/add_image.png")
 # Student classes
 student_classes = ['6eme', '5e', '4e', '3e', '2ndC', '2ndA',
                    '1ereD', '1ereA', 'TleD', 'TleA']
+
+
+def draw_student_card(student_pic_path, student_data):
+    labels = """
+Numero ID:
+Nom&Prenom:
+Genre:
+Age:
+Classe:
+Numero:
+email:
+    """
+    student_card = Image.open('images/student_card_frame.png')
+    pic = Image.open(student_pic_path)
+    new_size = (100, 100)
+    pic_resized = pic.resize(new_size)
+    student_card.paste(pic_resized, (15, 25))
+    # draw image
+
+    draw = ImageDraw.Draw(student_card)
+    heading_font = ImageFont.truetype('bahnschrift', 18)
+    labels_font = ImageFont.truetype('arial', 15)
+    data_font = ImageFont.truetype('bahnschrift', 13)
+
+    draw.text(xy=(130, 60), text='La carte de l\'élève', fill=(0, 0, 0),
+              font=heading_font)
+
+    draw.multiline_text(xy=(15, 120), text=labels,
+                        fill=(0, 0, 0), font=labels_font, spacing=6)
+
+    draw.multiline_text(xy=(120, 120), text=student_data,
+                        font=data_font, spacing=10, fill=(0, 0, 0))
+    return student_card
+
+
+def student_card_page(student_card_obj):
+    ''' Cette fonction ecris les informations de l'eleve sur la page
+        La page est une photo en realite(),
+        La fonction prend un obj qui est en realite le return de la fonction draw_student_card()
+        On converti l'image retourner en une imageTk
+        Cette fonction sera donc appeler dans le add_student() dans la partie ou on a ajouter les datat dans le db
+        et remplir la carte. Donc le retour de la fonction draw_student_card()sera notre objet student_card_ob
+
+    '''
+    student_card_img = ImageTk.PhotoImage(student_card_obj)
+
+    student_card_page_fm = Frame(
+        root, highlightbackground=bg_color, highlightthickness=3)
+
+    heading_lb = Label(student_card_page_fm, text=" La carte de l'élève",
+                       bg=bg_color, fg='white', font=('Bold', 18))
+    heading_lb.place(x=0, y=0, width=400)
+
+    close_btn = Button(student_card_page_fm, text="X",
+                       font=('Bold', 13), bg=bg_color, fg='white', bd=0, command=lambda: student_card_page_fm.destroy())
+    close_btn.place(x=370, y=0)
+
+    student_card_lb = Label(student_card_page_fm, image=student_card_img)
+    student_card_lb.place(x=50, y=50)
+    student_card_lb.image = student_card_img
+
+    save_student_card_btn = Button(
+        # borderwidth=1, bordure sera visible
+        student_card_page_fm, text='Enregister la carte', bg=bg_color, font=('Bold', 15), fg='white', bd=0)
+    save_student_card_btn.place(x=80, y=375)
+
+    student_card_page_fm.place(x=50, y=30, width=400, height=450)
+
+    print_student_card_btn = Button(
+        # borderwidth=1, bordure sera visible
+        student_card_page_fm, text='🖨', bg=bg_color, font=('Bold', 18), fg='white', bd=0)
+    print_student_card_btn.place(x=270, y=370)
+
+    student_card_page_fm.place(x=50, y=30, width=400, height=450)
 
 
 def init_database():
@@ -329,7 +403,30 @@ def add_account_page():
         pattern = r"^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$"
         match = re.match(pattern=pattern, string=email)
         return match
-    #  @...todo: check_phone number and username
+    #  @...todo: check_phone number and username and age
+
+    def validate_age(age):
+        ''''
+        Cette fonction verifie l'age en tenant compte du fait que ca soit 02 digits
+        '''
+        pattern = r"^\d{1,2}$"
+      # Accepte un ou plusieurs chiffres (jusqu'à 3 chiffres)
+        match = re.match(pattern, age)
+        return match
+
+    def isNameValide(name):
+        ''''
+        Cette fonction force en fait le user a donner un nom sous forme Nom+Prenom
+        '''
+        pattern = r"^[A-Z][a-z]+ [A-Z][a-z]+$"
+        match = re.match(pattern, name)
+        return match
+
+    def isContactValid(contact):
+        ''''Verfirie la forme des numero : 08chiffres'''
+        pattern = r"^\d{8}$"
+        match = re.match(pattern, contact)
+        return match
 
     def generate_id_number():
         '''
@@ -368,17 +465,37 @@ def add_account_page():
                 highlightbackground='red', highlightcolor='red')
             student_name_ent.focus()
             message_box(message='Vous devrez remplir\n le nom de l\'élève')
+            # Verifie si le nom est complet
+        # elif not isNameValide(student_name_ent.get()):
+        #     student_name_ent.config(
+        #         highlightbackground='red', highlightcolor='red')
+        #     student_name_ent.focus()
+            message_box(message='Veuillez donner le nom\n et le prenom')
         elif student_age_ent.get() == '':
             student_age_ent.config(
                 highlightbackground='red', highlightcolor='red')
             student_age_ent.focus()
             message_box(message="Veuillez renseigner l'âge de l'élève")
+            # Verifie si l'age est comforme
+        elif not validate_age(age=student_age_ent.get()):
+            student_age_ent.config(
+                highlightbackground='red', highlightcolor='red')
+            student_age_ent.focus()
+            message_box(
+                message="L'age invalide\n Veuillez utiliser un age\n valide:2 chiffres")
         elif student_contact_ent.get() == '':
             student_contact_ent.config(
                 highlightbackground='red', highlightcolor='red')
             student_contact_ent.focus()
             message_box(
                 message="Veuillez renseigner votre numero \n joignable")
+            # verifie la validite du numero
+        elif not isContactValid(student_contact_ent.get()):
+            student_contact_ent.config(
+                highlightbackground='red', highlightcolor='red')
+            student_contact_ent.focus()
+            message_box(
+                message="Veuillez renseigner un \n numero valide\n Exemple: 65544895 ")
         elif select_class_btn.get() == '':
             # select box n'a pas les attribut highlight, donc on va juste focus
             select_class_btn.focus()
@@ -390,6 +507,7 @@ def add_account_page():
             student_email_ent.focus()
             message_box(
                 message="Veuillez ajouter un email\n pour recevoir des informations\n la dessus.")
+            # Verifie si l'email est comforme
         elif not check_invalid_email(email=student_email_ent.get().lower()):
             student_email_ent.config(
                 highlightbackground='red', highlightcolor='red')
@@ -428,10 +546,26 @@ def add_account_page():
                      student_email_ent.get(),
                      pic_data
                      )
+
+            data = f"""
+{student_id_ent.get()}
+{student_name_ent.get()}
+{student_gender_val.get()}
+{student_age_ent.get()}
+{select_class_btn.get()}
+{student_contact_ent.get()}
+{student_email_ent.get()}
+
+            """
+            get_student_card = draw_student_card(
+                student_pic_path=pic_path.get(), student_data=data)
+            # On appelle la fonction student_card_page() en lui fournissant get_student_card
+            student_card_page(get_student_card)
+            add_account_page_fm.destroy()
+            root.update()
             message_box('Votre compte est bien crée\n avec succès! Merci',
                         statut='green')
-
-            # change de page: register form to home
+     # change de page: register form to home
 
     def change_page():
         '''
@@ -622,5 +756,7 @@ def confirmation_box(message):
 
 
 init_database()
+# draw_student_card()
+# student_card_page()
 welcome_page()
 root.mainloop()
